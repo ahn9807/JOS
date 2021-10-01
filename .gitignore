@@ -17,5 +17,8 @@
 /prep?/
 /prep*.tar.gz
 /conf/lab.mk
+/a.out
+/.gdb_history
+/core
 *~
 vivek.map
