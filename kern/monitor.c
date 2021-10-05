@@ -26,6 +26,7 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Display stack backtrace", mon_backtrace }
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -61,6 +62,40 @@ int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
+	uint64_t rip, rbp;
+	read_rip(rip);
+	cprintf("Stack backtrace:\n");
+	
+	struct Ripdebuginfo info;
+	rbp = read_rbp();
+	
+	debuginfo_rip(rip, &info);
+
+	while(strcmp(info.rip_fn_name, "i386_init")!=0){
+		cprintf("   rbp %016x rip %016x\n", rbp, rip);
+		cprintf("       %s:%d: %s+%016x   args:%d",info.rip_file, info.rip_line, info.rip_fn_name, rip - info.rip_fn_addr, info.rip_fn_narg);
+		
+		for(int i=0;i<info.rip_fn_narg;i++) {
+			if(info.size_fn_arg[i] == 4) cprintf("  %016x", *(uint32_t *)(info.offset_fn_arg[i] + rbp + 16));
+			else cprintf("  %016x", *(uint64_t *)(info.offset_fn_arg[i] + rbp + 16));
+		}
+		cprintf("\n");
+
+		rip = *(uint64_t *)(rbp + 8);
+		rbp = *(uint64_t *)rbp;
+		
+		debuginfo_rip(rip, &info);
+	}
+
+	cprintf("   rbp %016x rip %016x\n", rbp, rip);
+	cprintf("       %s:%d: %s+%016x   args:%d",info.rip_file, info.rip_line, info.rip_fn_name, rip - info.rip_fn_addr, info.rip_fn_narg);
+	
+	for(int i=0;i<info.rip_fn_narg;i++) {
+		if(info.size_fn_arg[i] == 4) cprintf("  %016x", *(uint32_t *)(info.offset_fn_arg[i] + rbp + 16));
+		else cprintf("  %016x", *(uint64_t *)(info.offset_fn_arg[i] + rbp + 16));
+	}
+	cprintf("\n");
+
 	return 0;
 }
 
