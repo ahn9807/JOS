@@ -22,3 +22,7 @@
 /core
 *~
 vivek.map
+tags
+.tags
+/.vscode
+.json
