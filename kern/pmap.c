@@ -504,6 +504,7 @@ page_free(struct PageInfo *pp)
 void
 page_decref(struct PageInfo* pp)
 {
+	//cprintf("###### pp:%x, pp_ref:%d\n",pp,pp->pp_ref);
 	if (--pp->pp_ref == 0)
 		page_free(pp);
 }
@@ -560,34 +561,17 @@ pml4e_walk(pml4e_t *pml4e, const void *va, int create)
 				return NULL;
 			}
 		}
+		else {
+			return NULL;
+		}
 	}
 	
 	pte = pdpe_walk(KADDR(PTE_ADDR(*pml4e_entry)), va, create);
-	if (pte == NULL && new_page && is_page_allocated){
+	/*if (pte == NULL && new_page && is_page_allocated){
 		*pml4e_entry = 0;
 		page_free(new_page);
 		return NULL;
-	}
-	
-	/*
-	//if((uint64_t)va==0)cprintf("### in pml4 pp:%x, free_list[0]:%x\n",pa2page(*pml4e_entry),page_free_list[0]);
-	// When pte is not null but pml4e_entry's ref is 0 due to above page_free(new_page).
-	if(pa2page(*pml4e_entry)->pp_ref == 0 && page_free_list != NULL){
-		//find corresponding page in free list
-		struct PageInfo *fp;
-		struct PageInfo *prev = NULL;
-		for(fp=page_free_list;fp!=NULL;prev=fp,fp=fp->pp_link){
-			if(fp==pa2page(*pml4e_entry)){
-				if(prev != NULL) prev->pp_link = fp->pp_link;
-				else page_free_list = fp->pp_link;
-
-				fp->pp_link = NULL;
-				fp->pp_ref++;
-				break;
-			}
-		}
-	}
-	*/
+	}*/
 
 	return pte;
 }
@@ -624,6 +608,9 @@ pdpe_walk(pdpe_t *pdpe,const void *va,int create){
 				return NULL;
 			}
 		}
+		else {
+			return NULL;
+		}
 	}
 
 	// When __m_ppn >= npages, KADDR causes panic.
@@ -632,11 +619,11 @@ pdpe_walk(pdpe_t *pdpe,const void *va,int create){
 	// if (__m_ppn >= npages) return NULL;
 
 	pte = pgdir_walk(KADDR(PTE_ADDR(*pdpe_entry)), va, create);
-	if (pte == NULL && new_page && is_page_allocated){
+	/*if (pte == NULL && new_page && is_page_allocated){
 		*pdpe_entry = 0;
 		page_free(new_page);
 		return NULL;
-	}
+	}*/
 	
 	return pte;
 
@@ -660,6 +647,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 	if (!pgdir){
 		return NULL;
 	}
+	//if((uint64_t) va==PGSIZE) cprintf("###### pdx:%x, pdpe:%x, pml4:%x\n",PDX(va),PDPE(va),PML4(va));
 	
 	uint64_t *pgdir_entry = &(pgdir[PDX(va)]);
 	
@@ -676,6 +664,9 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 			else{
 				return NULL;
 			}
+		}
+		else {
+			return NULL;
 		}
 	}
 
@@ -745,19 +736,23 @@ int
 page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 {
 	// Fill this function in
-
+	// 1. Find pte with create=1
+	// 2. Increase the reference
+	// 3. Remove the page if it is present page
+	// 4. Insert mapping to pte
 	pte_t *pte = NULL;
-	
-	page_remove(pml4e, va);
-	
 	pte = pml4e_walk(pml4e, va, 1);
 	
+	//if((uint64_t) va==PGSIZE) cprintf("###### free list : %x\n",page_free_list);
 	if(pte == NULL){
+	//	if((uint64_t) va==PGSIZE) cprintf("###### insert null pte\n");
 		return -E_NO_MEM;
 	}
-	
+
 	pp->pp_ref ++;
-	cprintf("insert pte 0x%x\n", pte);
+	if(PTPRESENT(*pte)) page_remove(pml4e, va);
+	
+	//cprintf("insert pte 0x%x\n", pte);
 	*pte = page2pa(pp) | perm | PTE_P;
 	
 	return 0;
@@ -779,18 +774,18 @@ struct PageInfo *
 page_lookup(pml4e_t *pml4e, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	if((uint64_t)va >= KERNBASE) return NULL;
+	//if((uint64_t)va >= KERNBASE) return NULL;
 	pte_t *pte = pml4e_walk(pml4e, va, 0);
 
-	if((uint64_t)va==PGSIZE) cprintf("###### pp:%x\n",((uint64_t)pa2page(*pte)) | ((((uint64_t)pte)>>8) & 0x0FF0));
+	//if((uint64_t)va==PGSIZE) cprintf("###### pp:%x\n",((uint64_t)pa2page(*pte)) | ((((uint64_t)pte)>>8) & 0x0FF0));
 	
-	if(PTPRESENT(pte)){
-		if((uint64_t) va == PGSIZE) cprintf("###### lookup pte %x, va %x\n",pte,va);
+	if(pte){
+		//if((uint64_t) va == PGSIZE) cprintf("###### lookup pte %x\n",pa2page(*pte));
 		if(pte_store){
 			*pte_store = pte;
-			cprintf("pte: 0x%x\n", *pte);
+			//cprintf("pte: 0x%x\n", *pte);
 		}
-		return (struct PageInfo *)pa2page(PTE_ADDR(*pte));
+		return pa2page(*pte);
 	}
 	
 	return NULL;
@@ -820,14 +815,12 @@ page_remove(pml4e_t *pml4e, void *va)
 	struct PageInfo *found = page_lookup(pml4e, va, &pte_store);
 		
 	if(found){
-		*(uint64_t *)(va) = 1;
-		if((uint64_t)va == PGSIZE) cprintf("###### remove found %x\n",found);
-		
+		//if((uint64_t)va == PGSIZE) cprintf("###### remove found %x\n",found);
 		//memset(pte_store, 0, sizeof(pte_t));
 		//cprintf("pte_store: 0x%x, 0x%x 0x%x\n", *(uint64_t *)va, pte_store, *pte_store);
-		*((pte_t *)PTE_ADDR(pte_store)) = 0;
-		tlb_invalidate(pml4e, va);
+		*pte_store = 0;
 		page_decref(found);
+		tlb_invalidate(pml4e, va);
 	}
 
 }
@@ -1062,20 +1055,20 @@ check_va2pa(pml4e_t *pml4e, uintptr_t va)
 	pde_t *pde;
 	// cprintf("%x", va);
 	pml4e = &pml4e[PML4(va)];
-	// cprintf(" %x %x " , PML4(va), *pml4e);
+	// cprintf(" %x %x \n" , PML4(va), *pml4e);
 	if(!(*pml4e & PTE_P))
 		return ~0;
 	pdpe = (pdpe_t *) KADDR(PTE_ADDR(*pml4e));
-	// cprintf(" %x %x " , pdpe, *pdpe);
+	// cprintf(" %x %x \n" , pdpe, *pdpe);
 	if (!(pdpe[PDPE(va)] & PTE_P))
 		return ~0;
 	pde = (pde_t *) KADDR(PTE_ADDR(pdpe[PDPE(va)]));
-	// cprintf(" %x %x " , pde, *pde);
+	// cprintf(" %x %x \n" , pde, *pde);
 	pde = &pde[PDX(va)];
 	if (!(*pde & PTE_P))
 		return ~0;
 	pte = (pte_t*) KADDR(PTE_ADDR(*pde));
-	// cprintf(" %x %x " , pte, *pte);
+	// cprintf(" %x %x \n" , pte, *pte);
 	if (!(pte[PTX(va)] & PTE_P))
 		return ~0;
 	// cprintf(" %x %x\n" , PTX(va),  PTE_ADDR(pte[PTX(va)]));
@@ -1142,14 +1135,12 @@ page_check(void)
 	assert(page_insert(boot_pml4e, pp3, (void*) PGSIZE, 0) == 0);
 	assert(check_va2pa(boot_pml4e, PGSIZE) == page2pa(pp3));
 	assert(pp3->pp_ref == 2);
-	
 	// should be no free memory
 	assert(!page_alloc(0));
 
 	// should be able to map pp3 at PGSIZE because it's already there
 	assert(page_insert(boot_pml4e, pp3, (void*) PGSIZE, 0) == 0);
 	assert(check_va2pa(boot_pml4e, PGSIZE) == page2pa(pp3));
-	cprintf("###### pp3 ref %d\n",pp3->pp_ref);
 	assert(pp3->pp_ref == 2);
 
 	// pp3 should NOT be on the free list
@@ -1177,6 +1168,7 @@ page_check(void)
 	assert(!(*pml4e_walk(boot_pml4e, (void*) PGSIZE, 0) & PTE_U));
 
 	// should have pp1 at both 0 and PGSIZE
+	//cprintf("###### va2pa:%x, page2pa:%x\n",check_va2pa(boot_pml4e, 0),page2pa(pp1));
 	assert(check_va2pa(boot_pml4e, 0) == page2pa(pp1));
 	assert(check_va2pa(boot_pml4e, PGSIZE) == page2pa(pp1));
 	// ... and ref counts should reflect this
