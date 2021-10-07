@@ -464,6 +464,7 @@ void page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
+	assert(pp->pp_ref == 0);
 	assert(pp->pp_link == NULL);
 
 	pp->pp_link = page_free_list;
@@ -535,15 +536,18 @@ pml4e_walk(pml4e_t *pml4e, const void *va, int create)
 			{
 				return NULL;
 			}
+		} else {
+			return NULL;
 		}
 	}
 
 	pte = pdpe_walk(KADDR(PTE_ADDR(*pml4e_entry)), va, create);
-	if (pte == NULL && new_page && is_page_allocated)
-	{
-		page_free(new_page);
-		return NULL;
-	}
+	// if (pte == NULL && new_page && is_page_allocated)
+	// {
+	// 	new_page->pp_ref--;
+	// 	page_free(new_page);
+	// 	return NULL;
+	// }
 
 	return pte;
 }
@@ -581,15 +585,18 @@ pdpe_walk(pdpe_t *pdpe, const void *va, int create)
 			{
 				return NULL;
 			}
+		} else {
+			return NULL;
 		}
 	}
 
 	pte = pgdir_walk(KADDR(PTE_ADDR(*pdpe_entry)), va, create);
-	if (pte == NULL && new_page && is_page_allocated)
-	{
-		page_free(new_page);
-		return NULL;
-	}
+	// if (pte == NULL && new_page && is_page_allocated)
+	// {
+	// 	new_page->pp_ref--;
+	// 	page_free(new_page);
+	// 	return NULL;
+	// }
 
 	return pte;
 }
@@ -630,6 +637,8 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 			{
 				return NULL;
 			}
+		} else {
+			return NULL;
 		}
 	}
 
@@ -691,7 +700,21 @@ boot_map_region(pml4e_t *pml4e, uintptr_t la, size_t size, physaddr_t pa, int pe
 //
 int page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 {
-	// Fill this function in
+	pte_t *pte = NULL;
+
+	pte = pml4e_walk(pml4e, va, 1);
+
+	if(pte == NULL) {
+		return -E_NO_MEM;
+	}
+
+	pp->pp_ref++;
+	if(PTPRESENT(*pte)) {
+		page_remove(pml4e, va);
+	}
+
+	*pte = page2pa(pp) | perm | PTE_P;
+
 	return 0;
 }
 
@@ -709,7 +732,15 @@ int page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 struct PageInfo *
 page_lookup(pml4e_t *pml4e, void *va, pte_t **pte_store)
 {
-	// Fill this function in
+	pte_t *pte = pml4e_walk(pml4e, va, 0);
+
+	if(PTPRESENT(*pte) && pte) {
+		if(pte_store) {
+			*pte_store = pte;
+		}
+		return (struct PageInfo *)pa2page(PTE_ADDR(*pte));
+	}
+
 	return NULL;
 }
 
@@ -730,7 +761,13 @@ page_lookup(pml4e_t *pml4e, void *va, pte_t **pte_store)
 //
 void page_remove(pml4e_t *pml4e, void *va)
 {
-	// Fill this function in
+	pte_t *pte_store;
+	struct PageInfo *page = page_lookup(pml4e, va, &pte_store);
+	if(page) {
+		*pte_store = 0;
+		page_decref(page);
+		tlb_invalidate(pml4e, va);
+	}
 }
 
 //
@@ -1032,9 +1069,9 @@ page_check(void)
 	assert(page_insert(boot_pml4e, pp1, 0x0, 0) < 0);
 	page_free(pp2);
 	page_free(pp3);
-	//cprintf("pp1 ref count = %d\n",pp1->pp_ref);
-	//cprintf("pp0 ref count = %d\n",pp0->pp_ref);
-	//cprintf("pp2 ref count = %d\n",pp2->pp_ref);
+	// cprintf("pp1 ref count = %d\n",pp1->pp_ref);
+	// cprintf("pp0 ref count = %d\n",pp0->pp_ref);
+	// cprintf("pp2 ref count = %d\n",pp2->pp_ref);
 	assert(page_insert(boot_pml4e, pp1, 0x0, 0) == 0);
 	assert((PTE_ADDR(boot_pml4e[0]) == page2pa(pp0) || PTE_ADDR(boot_pml4e[0]) == page2pa(pp2) || PTE_ADDR(boot_pml4e[0]) == page2pa(pp3)));
 	assert(check_va2pa(boot_pml4e, 0x0) == page2pa(pp1));
