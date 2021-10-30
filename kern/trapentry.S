@@ -50,6 +50,30 @@
    pusha,popa so you will find these macros handy.
  */
 
+# trap numbers order
+TRAPHANDLER_NOEC(XTRPX_divzero, T_DIVIDE)  # 0
+TRAPHANDLER_NOEC(XTRPX_debug, T_DEBUG)     # 1
+TRAPHANDLER_NOEC(XTRPX_nmint, T_NMI)       # 2
+TRAPHANDLER_NOEC(XTRPX_brkpt, T_BRKPT)     # 3
+TRAPHANDLER_NOEC(XTRPX_oflow, T_OFLOW)     # 4
+TRAPHANDLER_NOEC(XTRPX_bound, T_BOUND)     # 5
+TRAPHANDLER_NOEC(XTRPX_illop, T_ILLOP)     # 6
+TRAPHANDLER_NOEC(XTRPX_device, T_DEVICE)   # 7
+
+TRAPHANDLER(XTRPX_dblflt, T_DBLFLT)        # 8
+TRAPHANDLER(XTRPX_tss, T_TSS)              # 10
+TRAPHANDLER(XTRPX_segnp, T_SEGNP)          # 11
+TRAPHANDLER(XTRPX_stack, T_STACK)          # 12
+TRAPHANDLER(XTRPX_gpflt, T_GPFLT)          # 13
+TRAPHANDLER(XTRPX_pgflt, T_PGFLT)          # 14
+
+TRAPHANDLER_NOEC(XTRPX_fperr, T_FPERR)     # 16
+TRAPHANDLER(XTRPX_align, T_ALIGN)          # 17
+TRAPHANDLER_NOEC(XTRPX_mchk, T_MCHK)       # 18
+TRAPHANDLER_NOEC(XTRPX_simderr, T_SIMDERR) # 19
+
+TRAPHANDLER_NOEC(XTRPX_syscall, T_SYSCALL) # 48
+TRAPHANDLER_NOEC(XTRPX_default, T_DEFAULT) # 500
 
 
 /*
@@ -59,3 +83,19 @@
  *       for how to pass a pointer to the trapframe.
  */
 
+_alltraps:
+	movw %ds, %ax     # 1. push values to make the stack look like a struct Trapframe
+	pushq %rax
+	movw %es, %ax
+	pushq %rax
+	PUSHA
+	
+	movq $GD_KD, %rax # 2. load GD_KD into %ds and %es
+	movw %ax, %ds    
+	movq $GD_KD, %rax
+	movw %ax, %es
+	
+	movq %rsp, %rdi   # 3. Pass a pointer to the Trapframe as an argument to trap()
+	call trap         # 4. call trap
+	# POPA_
+	# iret

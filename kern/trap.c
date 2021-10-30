@@ -26,6 +26,27 @@ static struct Trapframe *last_tf;
 struct Gatedesc idt[256] = { { 0 } };
 struct Pseudodesc idt_pd = {0,0};
 
+extern void XTRPX_divzero();
+extern void XTRPX_debug();
+extern void XTRPX_nmint();
+extern void XTRPX_brkpt();
+extern void XTRPX_oflow();
+extern void XTRPX_bound();
+extern void XTRPX_illop();
+extern void XTRPX_device();
+extern void XTRPX_dblflt();
+extern void XTRPX_tss();
+extern void XTRPX_segnp();
+extern void XTRPX_stack();
+extern void XTRPX_gpflt();
+extern void XTRPX_pgflt();
+extern void XTRPX_fperr();
+extern void XTRPX_align();
+extern void XTRPX_mchk();
+extern void XTRPX_simderr();
+
+extern void XTRPX_syscall();
+extern void XTRPX_default();
 
 static const char *trapname(int trapno)
 {
@@ -68,6 +89,32 @@ trap_init(void)
 	// LAB 3: Your code here.
 	idt_pd.pd_lim = sizeof(idt)-1;
 	idt_pd.pd_base = (uint64_t)idt;
+
+	
+	// system, call gate -> dpl 3 (lowest privilege)
+	// trap, interrupt gate -> dpl 0 (highest privilege)
+	SETGATE(idt[T_DIVIDE], 0, GD_KT, XTRPX_divzero, 0); //div-zero
+	SETGATE(idt[T_DEBUG], 0, GD_KT, XTRPX_debug, 0); //debug, some are traps and others are faults
+	SETGATE(idt[T_NMI], 0, GD_KT, XTRPX_nmint, 0); //non-maskable interrupt
+	SETGATE(idt[T_BRKPT], 1, GD_KT, XTRPX_brkpt, 0); //breakpoint, istrap=1
+	SETGATE(idt[T_OFLOW], 1, GD_KT, XTRPX_oflow, 3); //overflow, istrap=1
+	SETGATE(idt[T_BOUND], 0, GD_KT, XTRPX_bound, 3); //bounds check
+	SETGATE(idt[T_ILLOP], 0, GD_KT, XTRPX_illop, 0); //illegal opcode
+	SETGATE(idt[T_DEVICE], 0, GD_KT, XTRPX_device, 0); //device not available
+	SETGATE(idt[T_DBLFLT], 0, GD_KT, XTRPX_dblflt, 0); //double fault
+	SETGATE(idt[T_TSS], 0, GD_KT, XTRPX_tss, 0); //invalid tss
+	SETGATE(idt[T_SEGNP], 0, GD_KT, XTRPX_segnp, 0); //segment not present
+	SETGATE(idt[T_STACK], 0, GD_KT, XTRPX_stack, 0); //stack exception
+	SETGATE(idt[T_GPFLT], 0, GD_KT, XTRPX_gpflt, 0); //general protection fault
+	SETGATE(idt[T_PGFLT], 0, GD_KT, XTRPX_pgflt, 0); //page fault
+	SETGATE(idt[T_FPERR], 0, GD_KT, XTRPX_fperr, 0); //floating point error
+	SETGATE(idt[T_ALIGN], 0, GD_KT, XTRPX_align, 0); //alignment check
+	SETGATE(idt[T_MCHK], 0, GD_KT, XTRPX_mchk, 0); //machine check
+	SETGATE(idt[T_SIMDERR], 0, GD_KT, XTRPX_simderr, 0); //SIMD floating point error
+
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, XTRPX_syscall, 3); //system call
+	SETGATE(idt[T_DEFAULT], 0, GD_KT, XTRPX_default, 0); //catchall
+
 	// Per-CPU setup
 	trap_init_percpu();
 }
