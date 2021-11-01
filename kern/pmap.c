@@ -877,6 +877,32 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+	uint64_t start = ROUNDDOWN((uint64_t)va, PGSIZE);
+	uint64_t end = ROUNDUP((uint64_t)((uint64_t)va) + len, PGSIZE);
+	pte_t *pte;
+	while(start<end){
+		pte = pml4e_walk(env->env_pml4e, (void *)start, 0);
+		if(start >= ULIM || pte == NULL) {
+			//cprintf("null pte or ULIM\n");
+			user_mem_check_addr = start;
+			if(start == ROUNDDOWN((uint64_t) va, PGSIZE)){
+				// va may not be page aligned
+				user_mem_check_addr = (uintptr_t) va;
+			}
+			return -E_FAULT;
+		}
+		else if(((*pte & 0xfff) & (perm | PTE_P)) != (perm | PTE_P)){
+			//cprintf("no permission\n");
+			user_mem_check_addr = start;
+			if(start == ROUNDDOWN((uint64_t) va, PGSIZE)){
+				// va may not be page aligned
+				user_mem_check_addr = (uintptr_t) va;
+			}
+			return -E_FAULT;
+		}
+		start += PGSIZE;		
+	}
+
 	return 0;
 
 }

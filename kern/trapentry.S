@@ -42,6 +42,15 @@
 	pushq $(num);							\
 	jmp _alltraps
 
+#define TRAPHANDLER_SC(name, num)					\
+	.globl name;							\
+	.type name, @function;						\
+	.align 2;							\
+	name:								\
+	pushq $0;							\
+	pushq $(num);							\
+	jmp _scall
+
 .text
 
 /*
@@ -72,7 +81,7 @@ TRAPHANDLER(XTRPX_align, T_ALIGN)          # 17
 TRAPHANDLER_NOEC(XTRPX_mchk, T_MCHK)       # 18
 TRAPHANDLER_NOEC(XTRPX_simderr, T_SIMDERR) # 19
 
-TRAPHANDLER_NOEC(XTRPX_syscall, T_SYSCALL) # 48
+TRAPHANDLER_SC(XTRPX_syscall, T_SYSCALL) # 48
 TRAPHANDLER_NOEC(XTRPX_default, T_DEFAULT) # 500
 
 
@@ -99,3 +108,18 @@ _alltraps:
 	call trap         # 4. call trap
 	# POPA_
 	# iret
+
+_scall:
+	movq %rax, %r15
+	movw %ds, %ax
+	pushq %rax
+	movw %es, %ax
+	pushq %rax
+	movq %r15, %rax
+	PUSHA
+	movq $GD_KD, %rax
+	movw %ax, %ds    
+	movq $GD_KD, %rax
+	movw %ax, %es
+	movq %rsp, %rdi
+	call trap
