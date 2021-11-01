@@ -43,6 +43,8 @@
 #define PTX(la)		((((uintptr_t) (la)) >> PTXSHIFT) & 0x1FF)
 #define PDPE(la)   ((((uintptr_t) (la)) >> PDPESHIFT) & 0x1FF)
 
+// check page table entry present
+#define PTPRESENT(la)	(((uintptr_t)(la)) & PTE_P)
 
 // offset in page
 #define PGOFF(la)	(((uintptr_t) (la)) & 0xFFF)
