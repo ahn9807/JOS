@@ -84,10 +84,10 @@ TRAPHANDLER_NOEC(XTRPX_default, T_DEFAULT) # 500
  */
 
 _alltraps:
-	movw %ds, %ax     # 1. push values to make the stack look like a struct Trapframe
-	pushq %rax
-	movw %es, %ax
-	pushq %rax
+	# 1. push values to make the stack look like a struct Trapframe
+	subq $0x10, %rsp
+	movw %es, 0x8(%rsp)
+	movw %ds, 0x0(%rsp)
 	PUSHA
 	
 	movq $GD_KD, %rax # 2. load GD_KD into %ds and %es

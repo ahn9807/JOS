@@ -443,7 +443,8 @@ void page_init(void)
 struct PageInfo *
 page_alloc(int alloc_flags)
 {
-	if(!page_free_list) {
+	if (!page_free_list)
+	{
 		return NULL;
 	}
 	struct PageInfo *next_free_page = page_free_list;
@@ -551,7 +552,9 @@ pml4e_walk(pml4e_t *pml4e, const void *va, int create)
 			{
 				return NULL;
 			}
-		} else {
+		}
+		else
+		{
 			return NULL;
 		}
 	}
@@ -600,7 +603,9 @@ pdpe_walk(pdpe_t *pdpe, const void *va, int create)
 			{
 				return NULL;
 			}
-		} else {
+		}
+		else
+		{
 			return NULL;
 		}
 	}
@@ -652,7 +657,9 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 			{
 				return NULL;
 			}
-		} else {
+		}
+		else
+		{
 			return NULL;
 		}
 	}
@@ -719,12 +726,14 @@ int page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 
 	pte = pml4e_walk(pml4e, va, 1);
 
-	if(pte == NULL) {
+	if (pte == NULL)
+	{
 		return -E_NO_MEM;
 	}
 
 	pp->pp_ref++;
-	if(PTPRESENT(*pte)) {
+	if (PTPRESENT(*pte))
+	{
 		page_remove(pml4e, va);
 	}
 
@@ -749,8 +758,10 @@ page_lookup(pml4e_t *pml4e, void *va, pte_t **pte_store)
 {
 	pte_t *pte = pml4e_walk(pml4e, va, 0);
 
-	if(PTPRESENT(*pte) && pte) {
-		if(pte_store) {
+	if (PTPRESENT(*pte) && pte)
+	{
+		if (pte_store)
+		{
 			*pte_store = pte;
 		}
 		return (struct PageInfo *)pa2page(PTE_ADDR(*pte));
@@ -778,7 +789,8 @@ void page_remove(pml4e_t *pml4e, void *va)
 {
 	pte_t *pte_store;
 	struct PageInfo *page = page_lookup(pml4e, va, &pte_store);
-	if(page) {
+	if (page)
+	{
 		*pte_store = 0;
 		page_decref(page);
 		tlb_invalidate(pml4e, va);
@@ -816,12 +828,41 @@ static uintptr_t user_mem_check_addr;
 // Returns 0 if the user program can access this range of addresses,
 // and -E_FAULT otherwise.
 //
-int
-user_mem_check(struct Env *env, const void *va, size_t len, int perm)
+int user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
-	// LAB 3: Your code here.
-	return 0;
+	// LAB 3: Your code here
+	uint64_t start = ROUNDDOWN((uint64_t)va, PGSIZE);
+	uint64_t end = ROUNDUP((uint64_t)((uint64_t)va) + len, PGSIZE);
+	pte_t *pte;
+	while (start < end)
+	{
+		pte = pml4e_walk(env->env_pml4e, (void *)start, 0);
+		if (start >= ULIM || pte == NULL)
+		{
+			//cprintf("null pte or ULIM\n");
+			user_mem_check_addr = start;
+			if (start == ROUNDDOWN((uint64_t)va, PGSIZE))
+			{
+				// va may not be page aligned
+				user_mem_check_addr = (uintptr_t)va;
+			}
+			return -E_FAULT;
+		}
+		else if (((*pte & 0xfff) & (perm | PTE_P)) != (perm | PTE_P))
+		{
+			//cprintf("no permission\n");
+			user_mem_check_addr = start;
+			if (start == ROUNDDOWN((uint64_t)va, PGSIZE))
+			{
+				// va may not be page aligned
+				user_mem_check_addr = (uintptr_t)va;
+			}
+			return -E_FAULT;
+		}
+		start += PGSIZE;
+	}
 
+	return 0;
 }
 
 //
@@ -831,16 +872,16 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 // If it cannot, 'env' is destroyed and, if env is the current
 // environment, this function will not return.
 //
-void
-user_mem_assert(struct Env *env, const void *va, size_t len, int perm)
+void user_mem_assert(struct Env *env, const void *va, size_t len, int perm)
 {
-	if (user_mem_check(env, va, len, perm | PTE_U) < 0) {
+	if (user_mem_check(env, va, len, perm | PTE_U) < 0)
+	{
 		cprintf("[%08x] user_mem_check assertion failure for "
-			"va %08x\n", env->env_id, user_mem_check_addr);
-		env_destroy(env);	// may not return
+				"va %08x\n",
+				env->env_id, user_mem_check_addr);
+		env_destroy(env); // may not return
 	}
 }
-
 
 // --------------------------------------------------------------
 // Checking functions.
@@ -882,7 +923,7 @@ check_page_free_list(bool only_low_memory)
 	// try to make sure it eventually causes trouble.
 	for (pp = page_free_list; pp; pp = pp->pp_link)
 		if (PDX(page2pa(pp)) < pdx_limit)
-		memset(page2kva(pp), 0x97, 128);
+			memset(page2kva(pp), 0x97, 128);
 
 	first_free_page = boot_alloc(0);
 	for (pp = page_free_list; pp; pp = pp->pp_link)
@@ -1017,7 +1058,7 @@ check_boot_pml4e(pml4e_t *pml4e)
 	}
 
 	// check envs array (new test for lab 3)
-	n = ROUNDUP(NENV*sizeof(struct Env), PGSIZE);
+	n = ROUNDUP(NENV * sizeof(struct Env), PGSIZE);
 	for (i = 0; i < n; i += PGSIZE)
 		assert(check_va2pa(pml4e, UENVS + i) == PADDR(envs) + i);
 
