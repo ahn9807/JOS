@@ -356,7 +356,6 @@ void x64_vm_init(void)
 	lcr3(boot_cr3);
 }
 
-
 // Modify mappings in boot_pml4e to support SMP
 //   - Map the per-CPU stacks in the region [KSTACKTOP-PTSIZE, KSTACKTOP)
 //
@@ -379,7 +378,13 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
+	uint8_t cpu_index = 0;
 
+	for (; cpu_index < NCPU; cpu_index++)
+	{
+		uintptr_t base = KSTACKTOP - (KSTKSIZE + KSTKGAP) * (cpu_index)-KSTKSIZE;
+		boot_map_region(boot_pml4e, base, KSTKSIZE, PADDR(percpu_kstacks[cpu_index]), PTE_W | PTE_P);
+	}
 }
 
 // --------------------------------------------------------------
@@ -423,10 +428,18 @@ void page_init(void)
 	size_t i;
 	struct PageInfo *last = NULL;
 	extern char end[];
+	extern unsigned char mpentry_start[], mpentry_end[];
+
 	for (i = 0; i < npages; i++)
 	{
 		// First Page
 		if (i == 0)
+		{
+			pages[i].pp_ref = 1;
+			pages[i].pp_link = NULL;
+		}
+		// SMP AP ENTRY
+		else if (i >= MPENTRY_PADDR / PGSIZE && i < MPENTRY_PADDR + mpentry_start - mpentry_end)
 		{
 			pages[i].pp_ref = 1;
 			pages[i].pp_link = NULL;
@@ -839,7 +852,7 @@ void page_remove(pml4e_t *pml4e, void *va)
 void tlb_invalidate(pml4e_t *pml4e, void *va)
 {
 	// Flush the entry only if we're modifying the current address space.
-	assert(pml4e!=NULL);
+	assert(pml4e != NULL);
 	if (!curenv || curenv->env_pml4e == pml4e)
 		invlpg(va);
 }
@@ -876,7 +889,18 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	size = ROUNDUP(size, PGSIZE);
+
+	if (base + size > MMIOLIM)
+	{
+		panic("Out of MMIOLIM");
+	}
+
+	boot_map_region(boot_pml4e, base, size, pa, PTE_PCD | PTE_PWT | PTE_W | PTE_P);
+
+	base += size;
+
+	return (void *)(base - size);
 }
 
 static uintptr_t user_mem_check_addr;
@@ -1139,24 +1163,16 @@ check_boot_pml4e(pml4e_t *pml4e)
 	for (i = 0; i < npages * PGSIZE; i += PGSIZE)
 		assert(check_va2pa(pml4e, KERNBASE + i) == i);
 
-	for (i = 0; i < KSTKSIZE; i += PGSIZE)
-	{
-		assert(check_va2pa(pml4e, KSTACKTOP - KSTKSIZE + i) == PADDR(bootstack) + i);
-	}
-
-	assert(check_va2pa(pml4e, KSTACKTOP - KSTKSIZE - 1) == ~0);
-	
 	// check kernel stack
 	// (updated in lab 4 to check per-CPU kernel stacks)
-	for (n = 0; n < NCPU; n++) {
+	for (n = 0; n < NCPU; n++)
+	{
 		uint64_t base = KSTACKTOP - (KSTKSIZE + KSTKGAP) * (n + 1);
 		for (i = 0; i < KSTKSIZE; i += PGSIZE)
-			assert(check_va2pa(pml4e, base + KSTKGAP + i)
-			       == PADDR(percpu_kstacks[n]) + i);
+			assert(check_va2pa(pml4e, base + KSTKGAP + i) == PADDR(percpu_kstacks[n]) + i);
 		for (i = 0; i < KSTKGAP; i += PGSIZE)
 			assert(check_va2pa(pml4e, base + i) == ~0);
 	}
-
 
 	pdpe_t *pdpe = KADDR(PTE_ADDR(boot_pml4e[1]));
 	pde_t *pgdir = KADDR(PTE_ADDR(pdpe[0]));
@@ -1184,7 +1200,6 @@ check_boot_pml4e(pml4e_t *pml4e)
 	}
 	cprintf("check_boot_pml4e() succeeded!\n");
 }
-
 // This function returns the physical address of the page containing 'va',
 // defined by the 'pml4e'.  The hardware normally performs
 // this functionality for us!  We define our own version to help check
@@ -1263,9 +1278,9 @@ page_check(void)
 	assert(page_insert(boot_pml4e, pp1, 0x0, 0) < 0);
 	page_free(pp2);
 	page_free(pp3);
-	// cprintf("pp1 ref count = %d\n",pp1->pp_ref);
-	// cprintf("pp0 ref count = %d\n",pp0->pp_ref);
-	// cprintf("pp2 ref count = %d\n",pp2->pp_ref);
+	//cprintf("pp1 ref count = %d\n",pp1->pp_ref);
+	//cprintf("pp0 ref count = %d\n",pp0->pp_ref);
+	//cprintf("pp2 ref count = %d\n",pp2->pp_ref);
 	assert(page_insert(boot_pml4e, pp1, 0x0, 0) == 0);
 	assert((PTE_ADDR(boot_pml4e[0]) == page2pa(pp0) || PTE_ADDR(boot_pml4e[0]) == page2pa(pp2) || PTE_ADDR(boot_pml4e[0]) == page2pa(pp3)));
 	assert(check_va2pa(boot_pml4e, 0x0) == page2pa(pp1));
@@ -1397,8 +1412,8 @@ page_check(void)
 	assert(pp5->pp_ref == 0);
 
 	// test mmio_map_region
-	mm1 = (uintptr_t) mmio_map_region(0, 4097);
-	mm2 = (uintptr_t) mmio_map_region(0, 4096);
+	mm1 = (uintptr_t)mmio_map_region(0, 4097);
+	mm2 = (uintptr_t)mmio_map_region(0, 4096);
 	// check that they're in the right region
 	assert(mm1 >= MMIOBASE && mm1 + 8096 < MMIOLIM);
 	assert(mm2 >= MMIOBASE && mm2 + 8096 < MMIOLIM);
@@ -1409,16 +1424,16 @@ page_check(void)
 	// check page mappings
 
 	assert(check_va2pa(boot_pml4e, mm1) == 0);
-	assert(check_va2pa(boot_pml4e, mm1+PGSIZE) == PGSIZE);
+	assert(check_va2pa(boot_pml4e, mm1 + PGSIZE) == PGSIZE);
 	assert(check_va2pa(boot_pml4e, mm2) == 0);
-	assert(check_va2pa(boot_pml4e, mm2+PGSIZE) == ~0);
+	assert(check_va2pa(boot_pml4e, mm2 + PGSIZE) == ~0);
 	// check permissions
-	assert(*pml4e_walk(boot_pml4e, (void*) mm1, 0) & (PTE_W|PTE_PWT|PTE_PCD));
-	assert(!(*pml4e_walk(boot_pml4e, (void*) mm1, 0) & PTE_U));
+	assert(*pml4e_walk(boot_pml4e, (void *)mm1, 0) & (PTE_W | PTE_PWT | PTE_PCD));
+	assert(!(*pml4e_walk(boot_pml4e, (void *)mm1, 0) & PTE_U));
 	// clear the mappings
-	*pml4e_walk(boot_pml4e, (void*) mm1, 0) = 0;
-	*pml4e_walk(boot_pml4e, (void*) mm1 + PGSIZE, 0) = 0;
-	*pml4e_walk(boot_pml4e, (void*) mm2, 0) = 0;
+	*pml4e_walk(boot_pml4e, (void *)mm1, 0) = 0;
+	*pml4e_walk(boot_pml4e, (void *)mm1 + PGSIZE, 0) = 0;
+	*pml4e_walk(boot_pml4e, (void *)mm2, 0) = 0;
 
 	cprintf("check_page() succeeded!\n");
 }

@@ -148,13 +148,13 @@ void trap_init_percpu(void)
 	//
 	// LAB 4: Your code here:
 
-
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
-	ts.ts_esp0 = KSTACKTOP;
+	thiscpu->cpu_ts.ts_esp0 = (uintptr_t)percpu_kstacks[thiscpu->cpu_id];
+	struct Segdesc this_gdt = gdt[(GD_TSS0 >> 3) + 2 * thiscpu->cpu_id];
 
 	// Initialize the TSS slot of the gdt.
-	SETTSS((struct SystemSegdesc64 *)((gdt_pd >> 16) + 40), STS_T64A, (uint64_t)(&ts), sizeof(struct Taskstate), 0);
+	SETTSS((struct SystemSegdesc64 *)((gdt_pd >> 16) + 40), STS_T64A, (uint64_t)(&thiscpu->cpu_ts), sizeof(struct Taskstate), 0);
 	// Load the TSS selector (like other segment selectors, the
 	// bottom three bits are special; we leave them 0)
 	ltr(GD_TSS0);
@@ -245,7 +245,6 @@ trap_dispatch(struct Trapframe *tf)
 			page_fault_handler(tf);
 			break;
 		case T_SYSCALL:
-			cprintf("trap sys: %d\n", tf->tf_regs.reg_rax);
 			ret = syscall(
 				tf->tf_regs.reg_rax,
 				tf->tf_regs.reg_rdx,
@@ -290,13 +289,14 @@ void trap(struct Trapframe *tf)
 	// sched_yield()
 	if (xchg(&thiscpu->cpu_status, CPU_STARTED) == CPU_HALTED)
 		lock_kernel();
+
 	// Check that interrupts are disabled.  If this assertion
 	// fails, DO NOT be tempted to fix it by inserting a "cli" in
 	// the interrupt path.
 	assert(!(read_eflags() & FL_IF));
 
-	cprintf("Incoming TRAP frame at %p\n", tf);
-
+	// cprintf("Incoming TRAP frame at %p\n", tf);
+	
 	if ((tf->tf_cs & 3) == 3)
 	{
 		// Trapped from user mode.
@@ -304,6 +304,7 @@ void trap(struct Trapframe *tf)
 		// serious kernel work.
 		// LAB 4: Your code here.
 		assert(curenv);
+		lock_kernel();
 
 		// Garbage collect if current enviroment is a zombie
 		if (curenv->env_status == ENV_DYING) {

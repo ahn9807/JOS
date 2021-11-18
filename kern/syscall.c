@@ -89,7 +89,20 @@ sys_exofork(void)
 	// will appear to return 0.
 
 	// LAB 4: Your code here.
-	panic("sys_exofork not implemented");
+	int r;
+	struct Env *e;
+
+	r = env_alloc(&e, curenv->env_id);
+	if(r) {
+		return r;
+	}
+	e->env_status = ENV_NOT_RUNNABLE;
+	e->env_tf = curenv->env_tf;
+	e->env_tf.tf_regs.reg_rax = 0;
+
+	cprintf("new envid: %d\n", e->env_id);
+
+	return e->env_id;
 }
 
 // Set envid's env_status to status, which must be ENV_RUNNABLE
@@ -109,7 +122,21 @@ sys_env_set_status(envid_t envid, int status)
 	// envid's status.
 
 	// LAB 4: Your code here.
-	panic("sys_env_set_status not implemented");
+	int r;
+	struct Env *e;
+
+	if(status != ENV_RUNNABLE && status != ENV_NOT_RUNNABLE) {
+		return -E_INVAL;
+	}
+
+	r = envid2env(envid, &e, 1);
+	if(r) {
+		return r;
+	} 
+
+	e->env_status = status;
+
+	return 0;
 }
 
 // Set the page fault upcall for 'envid' by modifying the corresponding struct
@@ -157,7 +184,36 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	//   allocated!
 
 	// LAB 4: Your code here.
-	panic("sys_page_alloc not implemented");
+	struct Env *e;
+	int r ;
+	struct PageInfo *page;
+
+	r = envid2env(envid, &e, 1);
+	if(r) {
+		return r;
+	}
+
+	if((uintptr_t)va >= UTOP || ((uintptr_t)va % PGSIZE)) {
+		return -E_INVAL;
+	}
+
+	if(!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_SYSCALL)) {
+		return -E_INVAL;
+	}
+
+	page = page_alloc(ALLOC_ZERO);
+
+	if(!page) {
+		return -E_NO_MEM;
+	}
+
+	r = page_insert(e->env_pml4e, page, va, perm);
+	if(r) {
+		page_free(page);
+		return r;
+	}
+
+	return 0;
 }
 
 // Map the page of memory at 'srcva' in srcenvid's address space
@@ -188,7 +244,45 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	//   check the current permissions on the page.
 
 	// LAB 4: Your code here.
-	panic("sys_page_map not implemented");
+	struct Env *src_e;
+	struct Env *dst_e;
+	struct PageInfo *page;
+	pte_t *src_pte;
+	int r ;
+
+	r = envid2env(srcenvid, &src_e, 1);
+	if(r) {
+		return r;
+	}
+
+	r = envid2env(dstenvid, &dst_e, 1);
+	if(r) {
+		return r;
+	}
+
+	if((uintptr_t)srcva >= UTOP || (uintptr_t)srcva % PGSIZE || (uintptr_t)dstva >= UTOP || (uintptr_t)dstva % PGSIZE) {
+		return -E_INVAL;
+	}
+
+	page = page_lookup(src_e->env_pml4e, srcva, &src_pte);
+	if(!page) {
+		return -E_INVAL;
+	}
+
+	if(!(perm & PTE_U) && !(perm & PTE_P) && (perm & ~PTE_SYSCALL)) {
+		return -E_INVAL;
+	}
+
+	if((perm & PTE_W) && !(*src_pte & PTE_W)) {
+		return -E_INVAL;
+	}
+
+	r = page_insert(dst_e->env_pml4e, page, dstva, perm);
+	if(r) {
+		return r;
+	}
+
+	return 0;
 }
 
 // Unmap the page of memory at 'va' in the address space of 'envid'.
@@ -204,7 +298,25 @@ sys_page_unmap(envid_t envid, void *va)
 	// Hint: This function is a wrapper around page_remove().
 
 	// LAB 4: Your code here.
-	panic("sys_page_unmap not implemented");
+	struct Env *e;
+	int r ;
+	struct PageInfo *page;
+
+	r = envid2env(envid, &e, 1);
+	if(r) {
+		return r;
+	}
+
+	if((uintptr_t)va >= UTOP || ((uintptr_t)va % PGSIZE)) {
+		return -E_INVAL;
+	}
+
+	page_remove(e->env_pml4e, va);
+	if(r) {
+		return r;
+	}
+
+	return 0;
 }
 
 // Try to send 'value' to the target env 'envid'.
@@ -300,6 +412,33 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 			break;
 		case SYS_env_destroy:
 			ret = sys_env_destroy((envid_t)a1);
+			break;
+		case SYS_yield:
+			sys_yield();
+			break;
+		case SYS_page_alloc:
+			ret = sys_page_alloc((envid_t)a1, (void *)a2, (int)a3);
+			break;
+		case SYS_page_map:
+			ret = sys_page_map((envid_t)a1, (void *)a2, (envid_t)a3, (void *)a4, (int)a5);
+			break;
+		case SYS_page_unmap:
+			ret = sys_page_unmap((envid_t)a1, (void *)a2);
+			break;
+		case SYS_exofork:
+			ret = sys_exofork();
+			break;
+		case SYS_env_set_status:
+			ret = sys_env_set_status((envid_t)a1, (int)a2);
+			break;
+		case SYS_env_set_pgfault_upcall:
+			panic("not implemented syscall");
+			break;
+		case SYS_ipc_try_send:
+			panic("not implemented syscall");
+			break;
+		case SYS_ipc_recv:
+			panic("not implemented syscall");
 			break;
 		case NSYSCALLS:
 			ret = -E_NO_SYS;

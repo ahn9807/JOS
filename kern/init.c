@@ -53,29 +53,30 @@ i386_init(void)
 	trap_init();
 
 	// Lab 4 multiprocessor initialization functions
+
+	// Acquire the big kernel lock before waking up APs
+	// Your code here:
+	lock_kernel();
+
 	mp_init();
 	lapic_init();
 
 	// Lab 4 multitasking initialization functions
 	pic_init();
 
-	// Acquire the big kernel lock before waking up APs
-	// Your code here:
-
 	// Starting non-boot CPUs
 	boot_aps();
-
-
-
-
 
 #if defined(TEST)
 	// Don't touch -- used by grading script!
 	ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
 	// Touch all you want.
-
-	ENV_CREATE(user_primes, ENV_TYPE_USER);
+	// ENV_CREATE(user_dumbfork, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
 #endif // TEST*
 
 	// Schedule and run the first user environment!
@@ -119,7 +120,6 @@ mp_main(void)
 {
 	// We are in high EIP now, safe to switch to kern_pgdir
 	lcr3(boot_cr3);
-	cprintf("SMP: CPU %d starting\n", cpunum());
 
 	lapic_init();
 	env_init_percpu();
@@ -131,9 +131,8 @@ mp_main(void)
 	// only one CPU can enter the scheduler at a time!
 	//
 	// Your code here:
-
-	// Remove this after you finish Exercise 4
-	for (;;);
+	lock_kernel();
+	sched_yield();
 }
 
 
