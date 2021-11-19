@@ -436,6 +436,7 @@ page_init(void)
 	}*/
 
 	extern char end[];
+	
 	for (i=0;i<npages;i++){
 		//First Page
 		if(i==0){
