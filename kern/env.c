@@ -198,6 +198,7 @@ env_setup_vm(struct Env *e)
 	// LAB 3: Your code here.
 	e->env_pml4e = page2kva(p);
 	p->pp_ref += 1;
+	e->env_cr3 = page2pa(p);
 	memcpy((void *) e->env_pml4e, (void *)boot_pml4e, PGSIZE);
 
 	// UVPT maps the env's own page table read-only.
@@ -387,7 +388,7 @@ load_icode(struct Env *e, uint8_t *binary)
 	if(!(p=page_alloc(ALLOC_ZERO))){
 		panic("load_icode");
 	}*/
-	region_alloc(e, (void *)USTACKTOP - PGSIZE, PGSIZE);
+	region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
 	//page_insert(e->env_pml4e, p, (void *)USTACKTOP - PGSIZE, PTE_U | PTE_W);
 	
 	e->env_tf.tf_rip = ((struct Elf *)binary)->e_entry;

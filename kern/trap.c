@@ -347,6 +347,9 @@ void page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
+	if((tf->tf_cs & 0xff) == GD_KD || (tf->tf_cs & 0xff) == GD_KT){
+		panic("kernel mode page fault");
+	}
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
@@ -381,6 +384,35 @@ void page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	if(curenv->env_pgfault_upcall){
+		struct UTrapframe *uxstk = (struct UTrapframe *)(UXSTACKTOP - sizeof(struct UTrapframe));
+		if((tf->tf_rsp >= UXSTACKTOP-PGSIZE) && (tf->tf_rsp <= UXSTACKTOP-1)){
+			// env is already running on the user exception stack
+			uxstk = (struct UTrapframe *)(tf->tf_rsp - 8 - sizeof(struct UTrapframe));
+		}
+		//cprintf("UXSTACKTOP %x, UTf size %x, uxstk %x, fva %x\n",UXSTACKTOP, sizeof(struct UTrapframe), uxstk, fault_va);
+		// check this env can modify the user exception stack
+		user_mem_assert(curenv, (void *)uxstk, sizeof(struct UTrapframe), PTE_W | PTE_U | PTE_P);
+		
+		// save trapframe when page fault occured
+		uxstk->utf_fault_va = fault_va;
+		uxstk->utf_err = tf->tf_err;
+		uxstk->utf_regs = tf->tf_regs;
+		uxstk->utf_rip = (uintptr_t)tf->tf_rip;
+		uxstk->utf_eflags = tf->tf_eflags;
+		uxstk->utf_rsp = tf->tf_rsp;
+
+		// set rsp, rip to branch to pgfault upcall
+		// It should be done after building uxstk
+		// because that uses rsp, rip.
+		tf->tf_rsp = (uintptr_t)uxstk;
+		tf->tf_rip = (uintptr_t)curenv->env_pgfault_upcall;
+
+		// branch to page fault upcall
+		env_run(curenv);
+
+	}
+
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",

@@ -302,7 +302,6 @@ snprintf(char *buf, int n, const char *fmt, ...)
 	va_copy(aq,ap);
 	rc = vsnprintf(buf, n, fmt, aq);
 	va_end(aq);
-
 	return rc;
 }
 

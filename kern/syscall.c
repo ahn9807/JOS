@@ -100,7 +100,7 @@ sys_exofork(void)
 	e->env_tf = curenv->env_tf;
 	e->env_tf.tf_regs.reg_rax = 0;
 
-	cprintf("new envid: %d\n", e->env_id);
+	//cprintf("new envid: %d\n", e->env_id);
 
 	return e->env_id;
 }
@@ -151,7 +151,15 @@ static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
 	// LAB 4: Your code here.
-	panic("sys_env_set_pgfault_upcall not implemented");
+	struct Env *target;
+	int res = envid2env(envid, &target, 1);
+	if(res == -E_BAD_ENV){
+		return -E_BAD_ENV;
+	}
+
+	target->env_pgfault_upcall = func;
+	return 0;
+	//panic("sys_env_set_pgfault_upcall not implemented");
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -212,6 +220,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 		page_free(page);
 		return r;
 	}
+	//cprintf("sys page alloc success to va %x\n",va);
 
 	return 0;
 }
@@ -432,7 +441,7 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 			ret = sys_env_set_status((envid_t)a1, (int)a2);
 			break;
 		case SYS_env_set_pgfault_upcall:
-			panic("not implemented syscall");
+			ret = sys_env_set_pgfault_upcall((envid_t)a1, (void *)a2);
 			break;
 		case SYS_ipc_try_send:
 			panic("not implemented syscall");
