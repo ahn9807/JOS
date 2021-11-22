@@ -53,6 +53,23 @@ extern void XTRPX_simderr();
 extern void XTRPX_syscall();
 extern void XTRPX_default();
 
+extern void IRQ_32();
+extern void IRQ_33();
+extern void IRQ_34();
+extern void IRQ_35();
+extern void IRQ_36();
+extern void IRQ_37();
+extern void IRQ_38();
+extern void IRQ_39();
+extern void IRQ_40();
+extern void IRQ_41();
+extern void IRQ_42();
+extern void IRQ_43();
+extern void IRQ_44();
+extern void IRQ_45();
+extern void IRQ_46();
+extern void IRQ_47();
+
 static const char *trapname(int trapno)
 {
 	static const char *const excnames[] = {
@@ -114,7 +131,22 @@ void trap_init(void)
 	SETGATE(idt[T_ALIGN], 0, GD_KT, XTRPX_align, 0);	 //alignment check
 	SETGATE(idt[T_MCHK], 0, GD_KT, XTRPX_mchk, 0);		 //machine check
 	SETGATE(idt[T_SIMDERR], 0, GD_KT, XTRPX_simderr, 0); //SIMD floating point error
-
+	SETGATE(idt[IRQ_OFFSET + 0], 0, GD_KT, IRQ_32, 0);
+	SETGATE(idt[IRQ_OFFSET + 1], 0, GD_KT, IRQ_33, 0);
+	SETGATE(idt[IRQ_OFFSET + 2], 0, GD_KT, IRQ_34, 0);
+	SETGATE(idt[IRQ_OFFSET + 3], 0, GD_KT, IRQ_35, 0);
+	SETGATE(idt[IRQ_OFFSET + 4], 0, GD_KT, IRQ_36, 0);
+	SETGATE(idt[IRQ_OFFSET + 5], 0, GD_KT, IRQ_37, 0);
+	SETGATE(idt[IRQ_OFFSET + 6], 0, GD_KT, IRQ_38, 0);
+	SETGATE(idt[IRQ_OFFSET + 7], 0, GD_KT, IRQ_39, 0);
+	SETGATE(idt[IRQ_OFFSET + 8], 0, GD_KT, IRQ_40, 0);
+	SETGATE(idt[IRQ_OFFSET + 10], 0, GD_KT, IRQ_41, 0);
+	SETGATE(idt[IRQ_OFFSET + 11], 0, GD_KT, IRQ_42, 0);
+	SETGATE(idt[IRQ_OFFSET + 12], 0, GD_KT, IRQ_43, 0);
+	SETGATE(idt[IRQ_OFFSET + 13], 0, GD_KT, IRQ_44, 0);
+	SETGATE(idt[IRQ_OFFSET + 14], 0, GD_KT, IRQ_45, 0);
+	SETGATE(idt[IRQ_OFFSET + 15], 0, GD_KT, IRQ_46, 0);
+	SETGATE(idt[IRQ_OFFSET + 16], 0, GD_KT, IRQ_47, 0);
 	SETGATE(idt[T_SYSCALL], 0, GD_KT, XTRPX_syscall, 3); //system call
 	SETGATE(idt[T_DEFAULT], 0, GD_KT, XTRPX_default, 0); //catchall
 
@@ -243,6 +275,10 @@ trap_dispatch(struct Trapframe *tf)
 			break;
 		case T_PGFLT:
 			page_fault_handler(tf);
+			break;
+		case IRQ_OFFSET + IRQ_TIMER: // 32 timer interrupt
+			lapic_eoi();
+			sched_yield();
 			break;
 		case T_SYSCALL:
 			ret = syscall(
