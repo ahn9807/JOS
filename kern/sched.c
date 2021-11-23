@@ -51,7 +51,7 @@ void sched_yield(void)
 	{
 		env_run(idle);
 	}
-	else if (curenv && curenv->env_status == ENV_RUNNING)
+	else if (curenv && (curenv->env_status == ENV_RUNNING))
 	{
 		env_run(idle);
 	}

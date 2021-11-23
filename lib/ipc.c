@@ -23,8 +23,37 @@ int32_t
 ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
 {
 	// LAB 4: Your code here.
-	panic("ipc_recv not implemented");
-	return 0;
+	int r;
+	if(pg){
+		r = sys_ipc_recv(pg);
+	}
+	else {
+		r = sys_ipc_recv((void *)UTOP);
+	}
+	
+	if(r){
+		//system call fail
+		if(from_env_store){
+			*from_env_store = 0;
+		}
+		if(perm_store){
+			*perm_store = 0;
+		}
+		return -E_INVAL;
+	}
+
+	if(pg){
+		r = sys_page_map(thisenv->env_ipc_from, thisenv->env_ipc_dstva, thisenv->env_id, pg, thisenv->env_ipc_perm);
+	}
+	if(from_env_store){
+		*from_env_store = thisenv->env_ipc_from;
+	}
+	if(perm_store && !r){
+		*perm_store = thisenv->env_ipc_perm;
+	}
+
+	//panic("ipc_recv not implemented");
+	return thisenv->env_ipc_value;
 }
 
 // Send 'val' (and 'pg' with 'perm', if 'pg' is nonnull) to 'toenv'.
@@ -39,7 +68,19 @@ void
 ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
 {
 	// LAB 4: Your code here.
-	panic("ipc_send not implemented");
+	void *target_page;
+	if(pg){
+		target_page = pg;
+	}
+	else {
+		target_page = (void *)UTOP;
+	}
+	int r;
+	while((r=sys_ipc_try_send(to_env, (uint64_t)val, target_page, perm))){
+		sys_yield();
+	}
+	
+	//panic("ipc_send not implemented");
 }
 
 

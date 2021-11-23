@@ -120,9 +120,9 @@ fork(void)
 	}
 
 	//parent
-	uint64_t start, end = UTOP;
+	uint64_t start, end = USTACKTOP; //USTACKTOP is used instead of UTOP due to tiemout problem
 	for(start=UTEXT;start<end;start+=PGSIZE){
-		if((start != (UXSTACKTOP - PGSIZE)) && 
+		if(
 		//	(uvpml4e[VPML4E(start)] & PTE_P) && // commented due to timeout problem
 			(uvpde[VPDPE(start)] & PTE_P) && 
 			(uvpd[VPD(start)] & PTE_P) && 

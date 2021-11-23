@@ -398,39 +398,39 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	struct PageInfo *page;
 	struct Env *dst_env;
 	pte_t *src_pte;
-
 	ret = envid2env(envid, &dst_env, 0);
-	
 	if(ret) {
 		return -E_BAD_ENV;
 	}
-	if(dst_env->env_status != ENV_NOT_RUNNABLE) {
+	if(!dst_env->env_ipc_recving) {
 		return -E_IPC_NOT_RECV;
 	}
-	if ((uintptr_t)srcva >= UTOP || ((uintptr_t)srcva % PGSIZE))
+	
+	if (((uintptr_t)srcva % PGSIZE) && ((uintptr_t)srcva < UTOP))
 	{
 		return -E_INVAL;
 	}
-	if (!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_SYSCALL))
+	
+	if ((perm & PTE_SYSCALL) != perm)
 	{
 		return -E_INVAL;
 	}
-
-	page = page_lookup(curenv->env_pml4e, srcva, &src_pte);
-	if (!page)
-	{
-		return -E_INVAL;
+	if(((uint64_t)srcva) < UTOP){
+		// page mapping necessary
+		
+		page = page_lookup(curenv->env_pml4e, srcva, &src_pte);
+		if ((perm & PTE_W) && !(((uint64_t)*src_pte) & PTE_W)){
+			return -E_INVAL;
+		}
+		if (!page){
+			return -E_INVAL;
+		}
+		ret = page_insert(dst_env->env_pml4e, page, dst_env->env_ipc_dstva, perm);
+		if(ret) {
+			return ret;
+		}
 	}
-	if ((perm & PTE_W) && !(*src_pte & PTE_W))
-	{
-		return -E_INVAL;
-	}
-
-	ret = page_insert(dst_env->env_pml4e, page, dst_env->env_ipc_dstva, perm);
-	if(ret) {
-		return ret;
-	}
-
+	
 	dst_env->env_ipc_perm = perm;
 	dst_env->env_ipc_from = curenv->env_id;
 	dst_env->env_ipc_value = value;
@@ -455,15 +455,22 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	if ((uintptr_t)dstva >= UTOP || (uintptr_t)dstva % PGSIZE)
-	{
-		return -E_INVAL;
-	}
-
+	unsigned status = curenv->env_status;
 	curenv->env_ipc_recving = true;
 	curenv->env_ipc_dstva = dstva;
 	curenv->env_status = ENV_NOT_RUNNABLE;
+	if (((uintptr_t)dstva % PGSIZE) && ((uintptr_t)dstva < UTOP))
+	{
+		curenv->env_ipc_recving = false;
+		curenv->env_status = status;
+		return -E_INVAL;
+	}
+	
+	curenv->env_tf.tf_regs.reg_rax = 0;
 	sched_yield();
+	
+	curenv->env_ipc_recving = false;
+	
 	return 0;
 }
 
