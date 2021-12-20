@@ -291,6 +291,15 @@ trap_dispatch(struct Trapframe *tf)
 
 			tf->tf_regs.reg_rax = ret;
 				break;
+
+		case IRQ_OFFSET + IRQ_KBD:
+			kbd_intr();
+			break;
+
+		case IRQ_OFFSET + IRQ_SERIAL:
+			serial_intr();
+			break;
+					
 		default:
 			goto unexpected_trap;
 	}

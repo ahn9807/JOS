@@ -357,13 +357,14 @@ void serve(void)
 					req, whom, uvpt[PGNUM(fsreq)], fsreq);
 
 		// All requests must contain an argument page
+		
 		if (!(perm & PTE_P))
 		{
 			cprintf("Invalid request from %08x: no argument page\n",
 					whom);
 			continue; // just leave it hanging...
 		}
-
+		
 		pg = NULL;
 		if (req == FSREQ_OPEN)
 		{

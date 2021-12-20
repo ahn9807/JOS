@@ -301,6 +301,25 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	uint64_t start, end = USTACKTOP; //USTACKTOP is used instead of UTOP due to tiemout problem
+	envid_t cur_id = sys_getenvid();
+	int r;
+	for(start=UTEXT;start<end;start+=PGSIZE){
+		if(
+		//	(uvpml4e[VPML4E(start)] & PTE_P) && // commented due to timeout problem
+			(uvpde[VPDPE(start)] & PTE_P) && 
+			(uvpd[VPD(start)] & PTE_P) && 
+			((uvpt[VPN(start)] & (PTE_P | PTE_SHARE)))){
+
+			if(uvpt[VPN(start)] & PTE_SYSCALL & PTE_SHARE){
+				if((r=sys_page_map(cur_id, (void *)start, child, (void *)start, uvpt[VPN(start)] & PTE_SYSCALL))){
+					return r;
+				}
+			}
+
+		}
+	}
+
 	return 0;
 }
 

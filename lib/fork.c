@@ -74,12 +74,19 @@ duppage(envid_t envid, unsigned pn)
 	int perm = (uvpt[VPN(pn*PGSIZE)] & ~PTE_W) | PTE_COW;
 	envid_t cur_id = sys_getenvid();
 	
+	if(uvpt[VPN(pn*PGSIZE)] & PTE_SYSCALL & PTE_SHARE){
+		sys_page_map(cur_id, (void *)(((uint64_t)pn)*PGSIZE), envid, (void *)(((uint64_t)pn)*PGSIZE), uvpt[VPN(pn*PGSIZE)] & PTE_SYSCALL);
+	}
+
+
 	// For each writable or copy-on-write page in its address space below UTOP, 
 	// the parent calls duppage,
 	// 1. which should map the page copy-on-write into the address space of the child
 	// 2. and then remap the page copy-on-write in its own address space.
-	sys_page_map(cur_id, (void *)(((uint64_t)pn)*PGSIZE), envid, (void *)(((uint64_t)pn)*PGSIZE), perm);
-	sys_page_map(cur_id, (void *)(((uint64_t)pn)*PGSIZE), cur_id, (void *)(((uint64_t)pn)*PGSIZE), perm);
+	else{
+		sys_page_map(cur_id, (void *)(((uint64_t)pn)*PGSIZE), envid, (void *)(((uint64_t)pn)*PGSIZE), perm);
+		sys_page_map(cur_id, (void *)(((uint64_t)pn)*PGSIZE), cur_id, (void *)(((uint64_t)pn)*PGSIZE), perm);
+	}
 	
 	//panic("duppage not implemented");
 	return 0;
@@ -125,7 +132,7 @@ fork(void)
 		//	(uvpml4e[VPML4E(start)] & PTE_P) && // commented due to timeout problem
 			(uvpde[VPDPE(start)] & PTE_P) && 
 			(uvpd[VPD(start)] & PTE_P) && 
-			(uvpt[VPN(start)] & (PTE_P | PTE_W | PTE_COW))) {
+			((uvpt[VPN(start)] & (PTE_P | PTE_W | PTE_COW | PTE_SHARE)))){
 				duppage(child, start/PGSIZE);
 		}
 	}

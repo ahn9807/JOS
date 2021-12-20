@@ -48,7 +48,8 @@ ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
 	if(from_env_store){
 		*from_env_store = thisenv->env_ipc_from;
 	}
-	if(perm_store && !r){
+	
+	if(perm_store){
 		*perm_store = thisenv->env_ipc_perm;
 	}
 
