@@ -105,7 +105,6 @@ envid_t
 fork(void)
 {
 	// LAB 4: Your code here.
-	
 	set_pgfault_handler(pgfault);
 	envid_t child = sys_exofork();
 	
@@ -136,10 +135,7 @@ fork(void)
 	sys_env_set_pgfault_upcall(child, _pgfault_upcall);
 	sys_env_set_status(child, ENV_RUNNABLE);
 
-	//cprintf("fork done\n");
-	
 	return child;
-	//panic("fork not implemented");
 }
 
 // Challenge!

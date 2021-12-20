@@ -108,4 +108,3 @@ ide_write(uint32_t secno, const void *src, size_t nsecs)
 
 	return 0;
 }
-
